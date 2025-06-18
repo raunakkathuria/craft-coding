@@ -1,284 +1,254 @@
 # Implementation Guide: API-to-CDN Sync
 
-## Prerequisites
+## TDD Development Approach
 
-### Required Accounts & Access
-- **GitHub Repository** with Actions enabled
-- **Cloudflare Account** with API access
-- **Node.js 18+** installed locally
-- **Your API endpoint** accessible via HTTP/HTTPS
+This project follows Test-Driven Development (TDD) principles:
+1. **Write tests first** for each module
+2. **Keep modules simple** and focused on single responsibility
+3. **Use pure functions** where possible for easy testing
+4. **Start with MVP**, then iterate
 
-### Required Secrets
-Set these in your GitHub repository settings (`Settings > Secrets and variables > Actions`):
+## MVP Phase (2-3 days)
 
-| Secret Name | Description | Example |
-|-------------|-------------|---------|
-| `CLOUDFLARE_API_TOKEN` | Cloudflare API token with Zone:Edit permissions | `abc123...` |
-| `CLOUDFLARE_ZONE_ID` | Your domain's Cloudflare Zone ID | `def456...` |
-| `API_BASE_URL` | Your API base URL | `https://api.yoursite.com` |
-| `API_AUTH_TOKEN` | API authentication token (if required) | `Bearer xyz789...` |
+### Goal
+Prove the core concept: Fetch → Transform → Save locally
 
-## Project Setup
-
-### 1. Repository Structure
+### Project Structure
 ```
 api-to-cdn-sync/
-├── .github/workflows/
-│   ├── sync-daily.yml
-│   └── sync-on-demand.yml
 ├── src/
-│   ├── config.ts
-│   ├── fetcher.ts
-│   ├── transformer.ts
-│   └── publisher.ts
-├── dist/                     # Generated files
+│   ├── fetcher.js           # Pure function: url → data
+│   ├── transformer.js       # Pure function: data → js string
+│   └── main.js             # Simple orchestration
+├── test/
+│   ├── fetcher.test.js
+│   ├── transformer.test.js
+│   └── integration.test.js
+├── output/                  # Generated files
 ├── package.json
-├── tsconfig.json
-└── README.md
+└── config.json             # Simple configuration
 ```
 
-### 2. Initialize Project
+### Setup
 ```bash
 npm init -y
-npm install --save-dev typescript @types/node
-npm install axios dotenv
-npx tsc --init
+npm install --save-dev jest
+npm install axios
 ```
 
-### 3. TypeScript Configuration
+### Configuration (`config.json`)
 ```json
 {
-  "compilerOptions": {
-    "target": "ES2020",
-    "module": "commonjs",
-    "outDir": "./dist",
-    "rootDir": "./src",
-    "strict": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true
-  },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist"]
-}
-```
-
-## Core Implementation
-
-### 1. Configuration (`src/config.ts`)
-```typescript
-export interface EndpointConfig {
-  name: string;
-  apiPath: string;
-  outputFile: string;
-  cacheTtl?: number;
-}
-
-export const config = {
-  apiBaseUrl: process.env.API_BASE_URL || '',
-  apiAuthToken: process.env.API_AUTH_TOKEN,
-  cloudflareZoneId: process.env.CLOUDFLARE_ZONE_ID || '',
-  cloudflareApiToken: process.env.CLOUDFLARE_API_TOKEN || '',
-
-  endpoints: [
+  "apiBaseUrl": "https://your-api.com",
+  "endpoints": [
     {
-      name: 'account-specifications',
-      apiPath: '/api/account-specs',
-      outputFile: 'account-specifications.js',
-      cacheTtl: 86400 // 24 hours
+      "name": "account-specs",
+      "path": "/api/account-specs",
+      "outputFile": "account-specifications.js"
     }
-  ] as EndpointConfig[]
-};
+  ]
+}
 ```
 
-### 2. Data Fetcher (`src/fetcher.ts`)
-```typescript
-import axios from 'axios';
-import { config, EndpointConfig } from './config';
+## MVP Implementation (Start Here)
 
-export async function fetchApiData(endpoint: EndpointConfig): Promise<any> {
-  const url = `${config.apiBaseUrl}${endpoint.apiPath}`;
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    'User-Agent': 'API-to-CDN-Sync/1.0'
-  };
+### 1. Test-First: Fetcher (`test/fetcher.test.js`)
+```javascript
+const { fetchApiData } = require('../src/fetcher');
 
-  if (config.apiAuthToken) {
-    headers['Authorization'] = config.apiAuthToken;
-  }
+describe('fetchApiData', () => {
+  test('should fetch data from valid URL', async () => {
+    const mockConfig = {
+      apiBaseUrl: 'https://api.example.com',
+      path: '/account-specs'
+    };
+
+    // Mock successful response
+    const mockData = { data: [{ account: { specification: {} } }] };
+    const result = await fetchApiData(mockConfig);
+
+    expect(result).toEqual(mockData);
+  });
+
+  test('should handle API errors gracefully', async () => {
+    const mockConfig = {
+      apiBaseUrl: 'https://invalid-api.com',
+      path: '/nonexistent'
+    };
+
+    await expect(fetchApiData(mockConfig)).rejects.toThrow();
+  });
+});
+```
+
+### 2. Simple Fetcher (`src/fetcher.js`)
+```javascript
+const axios = require('axios');
+
+async function fetchApiData(config) {
+  const url = `${config.apiBaseUrl}${config.path}`;
 
   try {
-    console.log(`Fetching data from: ${url}`);
-    const response = await axios.get(url, {
-      headers,
-      timeout: 30000,
-      validateStatus: (status) => status < 500
-    });
-
-    if (response.status !== 200) {
-      throw new Error(`API returned status ${response.status}: ${response.statusText}`);
-    }
-
-    console.log(`✅ Successfully fetched ${endpoint.name}`);
+    const response = await axios.get(url);
     return response.data;
   } catch (error) {
-    console.error(`❌ Failed to fetch ${endpoint.name}:`, error);
-    throw error;
+    throw new Error(`Failed to fetch from ${url}: ${error.message}`);
   }
 }
+
+module.exports = { fetchApiData };
 ```
 
-### 3. Data Transformer (`src/transformer.ts`)
-```typescript
-import { writeFileSync, mkdirSync } from 'fs';
-import { dirname } from 'path';
-import { EndpointConfig } from './config';
+### 3. Test-First: Transformer (`test/transformer.test.js`)
+```javascript
+const { transformToJS } = require('../src/transformer');
 
-export function transformToJavaScript(
-  data: any,
-  endpoint: EndpointConfig
-): string {
+describe('transformToJS', () => {
+  test('should convert JSON to JS module format', () => {
+    const input = { data: [{ name: 'test' }] };
+    const config = { name: 'account-specs' };
+
+    const result = transformToJS(input, config);
+
+    expect(result).toContain('export const accountSpecs');
+    expect(result).toContain(JSON.stringify(input));
+  });
+
+  test('should handle camelCase conversion', () => {
+    const input = { data: [] };
+    const config = { name: 'trading-instruments' };
+
+    const result = transformToJS(input, config);
+
+    expect(result).toContain('export const tradingInstruments');
+  });
+});
+```
+
+### 4. Simple Transformer (`src/transformer.js`)
+```javascript
+const fs = require('fs');
+const path = require('path');
+
+function transformToJS(data, config) {
+  const varName = toCamelCase(config.name);
   const timestamp = new Date().toISOString();
-  const version = timestamp.split('T')[0].replace(/-/g, '');
 
-  const jsContent = `// Auto-generated on ${timestamp}
-// Source: ${endpoint.apiPath}
-// Version: ${version}
-
-export const ${toCamelCase(endpoint.name)} = ${JSON.stringify(data, null, 2)};
+  return `// Generated on ${timestamp}
+export const ${varName} = ${JSON.stringify(data, null, 2)};
 
 export const metadata = {
-  version: "${version}",
   timestamp: "${timestamp}",
-  source: "${endpoint.apiPath}",
-  cacheTtl: ${endpoint.cacheTtl || 3600}
+  source: "${config.name}"
 };
-
-// For legacy support
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { ${toCamelCase(endpoint.name)}, metadata };
-}
 `;
-
-  return jsContent;
 }
 
-export function saveToFile(content: string, outputPath: string): void {
-  const fullPath = `dist/${outputPath}`;
-  mkdirSync(dirname(fullPath), { recursive: true });
-  writeFileSync(fullPath, content, 'utf8');
-  console.log(`✅ Saved to: ${fullPath}`);
+function saveToFile(content, outputPath) {
+  const dir = path.dirname(outputPath);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+  fs.writeFileSync(outputPath, content, 'utf8');
 }
 
-function toCamelCase(str: string): string {
+function toCamelCase(str) {
   return str.replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
 }
+
+module.exports = { transformToJS, saveToFile };
 ```
 
-### 4. Cloudflare Publisher (`src/publisher.ts`)
-```typescript
-import axios from 'axios';
-import { readFileSync } from 'fs';
-import { config } from './config';
+### 5. Simple Main Script (`src/main.js`)
+```javascript
+const { fetchApiData } = require('./fetcher');
+const { transformToJS, saveToFile } = require('./transformer');
+const config = require('../config.json');
 
-export async function publishToCloudflare(fileName: string): Promise<void> {
-  const filePath = `dist/${fileName}`;
-  const content = readFileSync(filePath, 'utf8');
-
-  const uploadUrl = `https://api.cloudflare.com/client/v4/zones/${config.cloudflareZoneId}/files/${fileName}`;
-
+async function main() {
   try {
-    const response = await axios.put(uploadUrl, content, {
-      headers: {
-        'Authorization': `Bearer ${config.cloudflareApiToken}`,
-        'Content-Type': 'application/javascript'
-      }
+    console.log('Starting API-to-CDN sync...');
+
+    const endpoint = config.endpoints[0]; // Single endpoint for MVP
+
+    // 1. Fetch data
+    const data = await fetchApiData({
+      apiBaseUrl: config.apiBaseUrl,
+      path: endpoint.path
     });
 
-    console.log(`✅ Published ${fileName} to Cloudflare`);
-    return response.data;
+    // 2. Transform to JS
+    const jsContent = transformToJS(data, endpoint);
+
+    // 3. Save locally
+    const outputPath = `output/${endpoint.outputFile}`;
+    saveToFile(jsContent, outputPath);
+
+    console.log(`✅ Successfully generated ${outputPath}`);
   } catch (error) {
-    console.error(`❌ Failed to publish ${fileName}:`, error);
-    throw error;
-  }
-}
-
-export async function invalidateCache(fileName: string): Promise<void> {
-  const purgeUrl = `https://api.cloudflare.com/client/v4/zones/${config.cloudflareZoneId}/purge_cache`;
-
-  try {
-    await axios.post(purgeUrl, {
-      files: [`https://your-domain.com/${fileName}`]
-    }, {
-      headers: {
-        'Authorization': `Bearer ${config.cloudflareApiToken}`,
-        'Content-Type': 'application/json'
-      }
-    });
-
-    console.log(`✅ Cache invalidated for ${fileName}`);
-  } catch (error) {
-    console.error(`❌ Failed to invalidate cache for ${fileName}:`, error);
-    throw error;
-  }
-}
-```
-
-### 5. Main Script (`src/index.ts`)
-```typescript
-import { config } from './config';
-import { fetchApiData } from './fetcher';
-import { transformToJavaScript, saveToFile } from './transformer';
-import { publishToCloudflare, invalidateCache } from './publisher';
-
-async function syncEndpoint(endpointName?: string) {
-  const endpointsToSync = endpointName
-    ? config.endpoints.filter(e => e.name === endpointName)
-    : config.endpoints;
-
-  if (endpointsToSync.length === 0) {
-    throw new Error(`Endpoint '${endpointName}' not found`);
-  }
-
-  for (const endpoint of endpointsToSync) {
-    try {
-      console.log(`\n🔄 Processing ${endpoint.name}...`);
-
-      // 1. Fetch data from API
-      const data = await fetchApiData(endpoint);
-
-      // 2. Transform to JavaScript
-      const jsContent = transformToJavaScript(data, endpoint);
-
-      // 3. Save locally
-      saveToFile(jsContent, endpoint.outputFile);
-
-      // 4. Publish to Cloudflare
-      await publishToCloudflare(endpoint.outputFile);
-
-      // 5. Invalidate cache
-      await invalidateCache(endpoint.outputFile);
-
-      console.log(`✅ ${endpoint.name} sync completed successfully`);
-    } catch (error) {
-      console.error(`❌ Failed to sync ${endpoint.name}:`, error);
-      process.exit(1);
-    }
-  }
-}
-
-// CLI interface
-const endpointName = process.argv[2];
-syncEndpoint(endpointName)
-  .then(() => {
-    console.log('\n🎉 All endpoints synced successfully!');
-    process.exit(0);
-  })
-  .catch((error) => {
-    console.error('\n💥 Sync failed:', error);
+    console.error('❌ Sync failed:', error.message);
     process.exit(1);
-  });
+  }
+}
+
+if (require.main === module) {
+  main();
+}
 ```
+
+### 6. Integration Test (`test/integration.test.js`)
+```javascript
+const fs = require('fs');
+const path = require('path');
+const { execSync } = require('child_process');
+
+describe('End-to-end MVP', () => {
+  beforeEach(() => {
+    // Clean output directory
+    if (fs.existsSync('output')) {
+      fs.rmSync('output', { recursive: true });
+    }
+  });
+
+  test('should complete full sync process', async () => {
+    // Run the main script
+    execSync('node src/main.js');
+
+    // Check output file exists
+    const outputFile = 'output/account-specifications.js';
+    expect(fs.existsSync(outputFile)).toBe(true);
+
+    // Check file content
+    const content = fs.readFileSync(outputFile, 'utf8');
+    expect(content).toContain('export const accountSpecs');
+    expect(content).toContain('metadata');
+  });
+});
+```
+
+## MVP Testing & Validation
+
+### Run Tests
+```bash
+npm test
+```
+
+### Manual Testing
+```bash
+# Test the MVP
+node src/main.js
+
+# Verify output
+ls output/
+cat output/account-specifications.js
+
+# Test in browser/Node.js
+node -e "const mod = require('./output/account-specifications.js'); console.log(mod.metadata);"
+```
+
+## Phase 1: Add GitHub Actions (After MVP Works)
+
+Only proceed to Phase 1 after MVP is proven to work locally.
 
 ## GitHub Actions Workflows
 
