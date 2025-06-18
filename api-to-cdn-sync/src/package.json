@@ -1,0 +1,16 @@
+{
+  "name": "api-to-cdn-sync",
+  "version": "1.0.0",
+  "description": "API to CDN sync application",
+  "main": "main.js",
+  "dependencies": {
+    "axios": "^1.6.0"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0"
+  },
+  "scripts": {
+    "test": "jest",
+    "sync": "node main.js"
+  }
+}

@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  mock-api:
+    build:
+      context: ./mock-api
+      dockerfile: Dockerfile
+    container_name: api-sync-mock-api
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=development
+      - API_AUTH_TOKEN=${API_AUTH_TOKEN:-test-token-123}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
+    networks:
+      - api-network
+
+  api-sync:
+    build:
+      context: ./src
+      dockerfile: Dockerfile
+    container_name: api-sync-main
+    depends_on:
+      mock-api:
+        condition: service_healthy
+    environment:
+      - NODE_ENV=development
+      - API_BASE_URL=http://mock-api:3001
+      - API_AUTH_TOKEN=${API_AUTH_TOKEN:-test-token-123}
+    volumes:
+      - ./output:/app/output:rw
+      - ./test:/app/test:ro
+    working_dir: /app
+    networks:
+      - api-network
+    # Don't start automatically - run manually
+    profiles:
+      - manual
+
+networks:
+  api-network:
+    driver: bridge
+    name: api-sync-network
+
+volumes:
+  output-data:
+    driver: local
