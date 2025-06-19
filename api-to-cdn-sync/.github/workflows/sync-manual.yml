@@ -1,0 +1,259 @@
+name: Manual API-to-CDN Sync
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment for deployment'
+        required: true
+        default: 'development'
+        type: choice
+        options:
+          - development
+          - production
+      api_endpoint:
+        description: 'API endpoint to sync (optional override)'
+        required: false
+        type: string
+        default: 'account-specs'
+      force_deploy:
+        description: 'Force deployment even if validation fails'
+        required: false
+        type: boolean
+        default: false
+      debug_mode:
+        description: 'Enable debug logging'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  manual-sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: 'api-to-cdn-sync/src/package-lock.json'
+
+      - name: Install dependencies
+        run: |
+          cd api-to-cdn-sync/src
+          npm ci
+
+      - name: Display workflow inputs
+        run: |
+          echo "🔧 Workflow Configuration:"
+          echo "- Environment: ${{ github.event.inputs.environment }}"
+          echo "- API Endpoint: ${{ github.event.inputs.api_endpoint || 'default (account-specs)' }}"
+          echo "- Force Deploy: ${{ github.event.inputs.force_deploy }}"
+          echo "- Debug Mode: ${{ github.event.inputs.debug_mode }}"
+          echo "- Triggered by: ${{ github.actor }}"
+          echo "- Timestamp: $(date -u)"
+
+      - name: Start mock API server
+        run: |
+          cd api-to-cdn-sync
+
+          if [ "${{ github.event.inputs.debug_mode }}" = "true" ]; then
+            echo "🐛 Starting mock server in debug mode..."
+            DEBUG=* node mock-server.js &
+          else
+            node mock-server.js &
+          fi
+
+          echo "MOCK_SERVER_PID=$!" >> $GITHUB_ENV
+
+          # Wait for server to start
+          sleep 3
+
+          # Health check with retry
+          for i in {1..5}; do
+            if curl -f http://localhost:3001/health; then
+              echo "✅ Mock API server is healthy"
+              break
+            else
+              echo "⏳ Waiting for server to start (attempt $i/5)..."
+              sleep 2
+            fi
+
+            if [ "$i" -eq 5 ]; then
+              echo "❌ Mock API server failed to start"
+              exit 1
+            fi
+          done
+
+      - name: Pre-deployment validation
+        run: |
+          cd api-to-cdn-sync/src
+
+          echo "🔍 Running pre-deployment validation..."
+
+          # Check configuration
+          if [ "${{ github.event.inputs.force_deploy }}" = "false" ]; then
+            echo "Validating CDN configuration..."
+            npm run validate:config || {
+              echo "❌ Configuration validation failed"
+              echo "💡 You can use 'Force Deploy' option to skip validation"
+              exit 1
+            }
+          else
+            echo "⚠️ Skipping configuration validation (force deploy enabled)"
+          fi
+
+          # Check API connectivity
+          echo "Testing API connectivity..."
+          curl -f -H "Authorization: Bearer ${{ secrets.API_AUTH_TOKEN }}" \
+               http://localhost:3001/api/account-specs || {
+                 echo "❌ API connectivity test failed"
+                 exit 1
+               }
+
+      - name: Run sync process
+        env:
+          API_AUTH_TOKEN: ${{ secrets.API_AUTH_TOKEN }}
+        run: |
+          cd api-to-cdn-sync/src
+
+          echo "🚀 Starting sync process..."
+
+          if [ "${{ github.event.inputs.debug_mode }}" = "true" ]; then
+            echo "🐛 Debug mode enabled - verbose output"
+            DEBUG=* npm run sync
+          else
+            npm run sync
+          fi
+
+      - name: Analyze generated files
+        run: |
+          cd api-to-cdn-sync/src
+
+          echo "📊 Analyzing generated files..."
+
+          if [ ! -d "output" ]; then
+            echo "❌ Output directory not found"
+            exit 1
+          fi
+
+          file_count=$(ls -1 output/*.js 2>/dev/null | wc -l)
+          total_size=$(du -sh output/ 2>/dev/null | cut -f1)
+
+          echo "📈 Generation Summary:"
+          echo "- Files generated: $file_count"
+          echo "- Total size: $total_size"
+          echo "- Files:"
+
+          for file in output/*.js; do
+            if [ -f "$file" ]; then
+              filename=$(basename "$file")
+              size=$(stat -c%s "$file" 2>/dev/null || stat -f%z "$file" 2>/dev/null || echo "unknown")
+
+              echo "  ✅ $filename ($size bytes)"
+
+              # Content validation
+              if grep -q "export const" "$file"; then
+                echo "    📋 Valid ES6 module with exports"
+              else
+                echo "    ⚠️ No exports found - check content"
+              fi
+
+              if grep -q "metadata" "$file"; then
+                echo "    📋 Contains metadata"
+              fi
+            fi
+          done
+
+      - name: Deploy to CDN
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          cd api-to-cdn-sync/src
+
+          echo "🚀 Deploying to CDN..."
+          echo "Target environment: ${{ github.event.inputs.environment }}"
+
+          # Deploy based on environment
+          if [ "${{ github.event.inputs.environment }}" = "production" ]; then
+            echo "🎯 Production deployment"
+            npm run deploy:prod
+          else
+            echo "🔧 Development deployment"
+            npm run deploy
+          fi
+
+      - name: Post-deployment testing
+        if: success()
+        run: |
+          echo "🧪 Running post-deployment tests..."
+
+          # Note: In a real scenario, these would test actual CDN URLs
+          # For now, we'll validate that the deployment commands succeeded
+          echo "✅ Deployment completed successfully"
+          echo "🔗 Files should now be available on CDN"
+
+          # Future enhancement: Add actual CDN URL testing here
+
+      - name: Cleanup
+        if: always()
+        run: |
+          echo "🧹 Cleanup..."
+
+          # Stop mock server
+          if [ ! -z "$MOCK_SERVER_PID" ]; then
+            echo "Stopping mock server (PID: $MOCK_SERVER_PID)"
+            kill $MOCK_SERVER_PID || true
+          fi
+
+          # Clean up any temporary files
+          cd api-to-cdn-sync
+          if [ -f "mock-server.log" ]; then
+            rm -f mock-server.log
+          fi
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: manual-sync-${{ github.event.inputs.environment }}-${{ github.run_number }}
+          path: |
+            api-to-cdn-sync/src/output/
+            api-to-cdn-sync/src/*.log
+          retention-days: 30
+
+      - name: Success summary
+        if: success()
+        run: |
+          echo "🎉 Manual sync completed successfully!"
+          echo ""
+          echo "📊 Deployment Summary:"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Environment:     ${{ github.event.inputs.environment }}"
+          echo "API Endpoint:    ${{ github.event.inputs.api_endpoint || 'account-specs (default)' }}"
+          echo "Triggered by:    ${{ github.actor }}"
+          echo "Run number:      ${{ github.run_number }}"
+          echo "Timestamp:       $(date -u)"
+          echo "Files generated: $(ls -1 api-to-cdn-sync/src/output/*.js 2>/dev/null | wc -l)"
+          echo "Force deploy:    ${{ github.event.inputs.force_deploy }}"
+          echo "Debug mode:      ${{ github.event.inputs.debug_mode }}"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          echo "🔗 Artifacts uploaded with name: manual-sync-${{ github.event.inputs.environment }}-${{ github.run_number }}"
+
+      - name: Failure summary
+        if: failure()
+        run: |
+          echo "❌ Manual sync failed!"
+          echo ""
+          echo "🔍 Troubleshooting:"
+          echo "- Check the step logs above for specific error details"
+          echo "- Verify all required secrets are configured"
+          echo "- Try running with debug mode enabled"
+          echo "- Use force deploy if configuration validation is blocking"

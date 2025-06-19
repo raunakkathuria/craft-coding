@@ -1,0 +1,129 @@
+name: Daily API-to-CDN Sync
+
+on:
+  schedule:
+    # Run daily at 6:00 AM UTC (2:00 PM Singapore time)
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'development'
+        type: choice
+        options:
+          - development
+          - production
+
+jobs:
+  sync-api-to-cdn:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: 'api-to-cdn-sync/src/package-lock.json'
+
+      - name: Install dependencies
+        run: |
+          cd api-to-cdn-sync/src
+          npm ci
+
+      - name: Start mock API server
+        run: |
+          cd api-to-cdn-sync
+          node mock-server.js &
+          echo "MOCK_SERVER_PID=$!" >> $GITHUB_ENV
+
+          # Wait for server to start
+          sleep 5
+
+          # Health check
+          curl -f http://localhost:3001/health || exit 1
+
+      - name: Run sync process
+        env:
+          API_AUTH_TOKEN: ${{ secrets.API_AUTH_TOKEN }}
+        run: |
+          cd api-to-cdn-sync/src
+          npm run sync
+
+      - name: Validate generated files
+        run: |
+          cd api-to-cdn-sync/src
+
+          # Check if output files exist
+          if [ ! -d "output" ] || [ -z "$(ls -A output)" ]; then
+            echo "❌ No output files generated"
+            exit 1
+          fi
+
+          # List generated files
+          echo "📁 Generated files:"
+          ls -la output/
+
+          # Validate file content
+          for file in output/*.js; do
+            if [ -f "$file" ]; then
+              echo "✅ Found: $file ($(wc -c < "$file") bytes)"
+
+              # Basic validation: check for export statements
+              if grep -q "export const" "$file"; then
+                echo "✅ Valid ES6 module format"
+              else
+                echo "❌ Invalid module format"
+                exit 1
+              fi
+            fi
+          done
+
+      - name: Deploy to CDN
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          ENVIRONMENT: ${{ github.event.inputs.environment || 'development' }}
+        run: |
+          cd api-to-cdn-sync/src
+
+          # Validate configuration first
+          npm run validate:config
+
+          # Deploy to CDN
+          if [ "$ENVIRONMENT" = "production" ]; then
+            npm run deploy:prod
+          else
+            npm run deploy
+          fi
+
+      - name: Cleanup
+        if: always()
+        run: |
+          # Stop mock server if it's running
+          if [ ! -z "$MOCK_SERVER_PID" ]; then
+            kill $MOCK_SERVER_PID || true
+          fi
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-files-${{ github.run_number }}
+          path: api-to-cdn-sync/src/output/
+          retention-days: 30
+
+      - name: Deployment summary
+        if: success()
+        run: |
+          echo "🎉 API-to-CDN sync completed successfully!"
+          echo "📊 Summary:"
+          echo "- Environment: ${{ github.event.inputs.environment || 'development' }}"
+          echo "- Trigger: ${{ github.event_name }}"
+          echo "- Timestamp: $(date -u)"
+          echo "- Files: $(ls -1 api-to-cdn-sync/src/output/*.js 2>/dev/null | wc -l)"
