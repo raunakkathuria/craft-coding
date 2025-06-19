@@ -4,13 +4,23 @@
   "description": "API to CDN sync application",
   "main": "main.js",
   "dependencies": {
-    "axios": "^1.6.0"
+    "axios": "^1.6.0",
+    "cloudflare": "^3.3.0",
+    "form-data": "^4.0.0"
   },
   "devDependencies": {
     "jest": "^29.7.0"
   },
   "scripts": {
-    "test": "jest",
-    "sync": "node main.js"
+    "test": "jest ../test",
+    "sync": "node main.js",
+    "deploy": "node ../cloudflare/deploy.js deploy",
+    "deploy:prod": "node ../cloudflare/deploy.js deploy production",
+    "validate:config": "node ../cloudflare/deploy.js validate"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "roots": ["<rootDir>/../test"],
+    "testMatch": ["**/*.test.js"]
   }
 }

@@ -23,10 +23,13 @@ You are reviewing the **API-to-CDN sync system** from a software architecture pe
 
 ### ✅ MVP Foundation (Completed)
 ```
-
-Local Development Architecture: ┌─────────────────┐ ┌──────────────────┐ ┌─────────────────┐ │ API Source │───▶│ Transform │───▶│ Local Files │ │ (Mock/Real API) │ │ (fetcher.js + │ │ (ES6 modules) │ │ │ │ transformer.js) │ │ │ └─────────────────┘ └──────────────────┘ └─────────────────┘
-
-```javascript
+Local Development Architecture:
+┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
+│   API Source    │───▶│   Transform      │───▶│   Local Files   │
+│ (Mock/Real API) │    │ (fetcher.js +    │    │ (ES6 modules)   │
+│                 │    │  transformer.js) │    │                 │
+└─────────────────┘    └──────────────────┘    └─────────────────┘
+```
 
 **Proven Components:**
 - HTTP client with Bearer token authentication (`fetcher.js`)
@@ -37,10 +40,13 @@ Local Development Architecture: ┌───────────────
 
 ### 🔄 Phase 1 Target Architecture
 ```
-
-Automated CI/CD Pipeline: ┌─────────────┐ ┌──────────────┐ ┌─────────────┐ ┌──────────────┐ │ GitHub │───▶│ MVP │───▶│ Cloudflare │───▶│ Global │ │ Actions │ │ Pipeline │ │ CDN │ │ Distribution│ │ (scheduler) │ │(fetch+trans.)│ │ (JS files) │ │ (<100ms) │ └─────────────┘ └──────────────┘ └─────────────┘ └──────────────┘
-
-```javascript
+Automated CI/CD Pipeline:
+┌─────────────┐    ┌──────────────┐    ┌─────────────┐    ┌──────────────┐
+│   GitHub    │───▶│     MVP      │───▶│ Cloudflare  │───▶│   Global     │
+│   Actions   │    │   Pipeline   │    │     CDN     │    │  Distribution│
+│ (scheduler) │    │(fetch+trans.)│    │ (JS files)  │    │  (<100ms)    │
+└─────────────┘    └──────────────┘    └─────────────┘    └──────────────┘
+```
 
 ## Architectural Review Areas
 
@@ -148,10 +154,13 @@ Automated CI/CD Pipeline: ┌─────────────┐ ┌─�
 
 #### **Current Stack Analysis**
 ```
-
-Runtime: Node.js 18+ (Mature, well-supported) Language: JavaScript (Simple, no build complexity) CI/CD: GitHub Actions (Integrated, cost-effective) CDN: Cloudflare (Global, performant) Containers: Docker (Standardized, portable) Testing: Jest (Standard Node.js testing)
-
-```javascript
+Runtime:     Node.js 18+ (Mature, well-supported)
+Language:    JavaScript (Simple, no build complexity)
+CI/CD:       GitHub Actions (Integrated, cost-effective)
+CDN:         Cloudflare (Global, performant)
+Containers:  Docker (Standardized, portable)
+Testing:     Jest (Standard Node.js testing)
+```
 
 #### **Stack Appropriateness**
 - ✅ **Simplicity**: Minimal complexity for MVP and Phase 1
@@ -170,10 +179,8 @@ Runtime: Node.js 18+ (Mature, well-supported) Language: JavaScript (Simple, no b
 
 #### **Current Data Flow**
 ```
-
 API JSON → In-Memory Processing → ES6 Module → CDN Storage
-
-```javascript
+```
 
 #### **Data Architecture Review**
 - **Schema Evolution**: How API changes affect transformation
