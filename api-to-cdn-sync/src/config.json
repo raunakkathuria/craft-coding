@@ -1,0 +1,10 @@
+{
+  "apiBaseUrl": "http://localhost:3001",
+  "endpoints": [
+    {
+      "name": "account-specs",
+      "path": "/api/account-specs",
+      "outputFile": "account-specifications.js"
+    }
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "data": [
+    {
+      "account": {
+        "specification": {
+          "display_name": "Standard",
+          "information": "Trade CFDs with competitive spreads and swap fees.",
+          "markets_offered": [
+            "Forex",
+            "Stock Indices",
+            "Commodities",
+            "Energies",
+            "Cryptocurrencies",
+            "ETFs"
+          ],
+          "max_leverage": 500,
+          "pips": 0.6
+        }
+      }
+    },
+    {
+      "account": {
+        "specification": {
+          "display_name": "Swap-Free",
+          "information": "Hold positions without overnight charges.",
+          "markets_offered": [
+            "Forex",
+            "Stock Indices",
+            "Commodities",
+            "Energies",
+            "Cryptocurrencies",
+            "ETFs"
+          ],
+          "max_leverage": 500,
+          "pips": 2.2
+        }
+      }
+    }
+  ]
+}

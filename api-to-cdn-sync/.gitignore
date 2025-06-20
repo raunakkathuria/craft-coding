@@ -1,0 +1,186 @@
+# API-to-CDN Sync Project .gitignore
+
+# Node.js Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.npm
+.pnpm-debug.log*
+
+# Package lock files (uncomment if you want to exclude them)
+# package-lock.json
+# yarn.lock
+
+# Generated Output Files
+output/
+src/output/
+dist/
+build/
+
+# Environment Variables and Secrets
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.staging
+
+# API Keys and Configuration (backup safety)
+config.production.json
+config.staging.json
+secrets.json
+
+# Docker
+.dockerignore
+docker-compose.override.yml
+.docker/
+
+# IDE and Editor Files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+*.sublime-workspace
+*.sublime-project
+
+# OS Generated Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Runtime Data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage Directory Used by Tools Like Istanbul
+coverage/
+*.lcov
+.nyc_output/
+
+# Dependency Directories
+jspm_packages/
+
+# Optional npm Cache Directory
+.npm
+
+# Optional REPL History
+.node_repl_history
+
+# Temporary Folders
+tmp/
+temp/
+.tmp/
+
+# Jest Coverage
+coverage/
+
+# ESLint Cache
+.eslintcache
+
+# Microbundle Cache
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
+
+# Optional REPL History
+.node_repl_history
+
+# Yarn Integrity File
+.yarn-integrity
+
+# Parcel-bundler Cache (https://parceljs.org/)
+.cache
+.parcel-cache
+
+# Next.js Build Output
+.next
+
+# Nuxt.js Build/Generate Output
+.nuxt
+dist
+
+# Storybook Build Outputs
+.out
+.storybook-out
+
+# Temporary Files
+*.tmp
+*.temp
+
+# MacOS
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Linux
+*~
+
+# Project Specific
+# Uncomment these if you don't want to track certain generated files
+# mock-api/logs/
+# test-results/
+# screenshots/
+
+# Backup Files
+*.bak
+*.backup
+*.old
+
+# IDE Specific
+.vscode/settings.json
+.vscode/tasks.json
+.vscode/launch.json
+.vscode/extensions.json
+
+# JetBrains IDEs
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Vim
+*.swp
+*.swo
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# Archive Files
+*.zip
+*.tar.gz
+*.rar
+*.7z
