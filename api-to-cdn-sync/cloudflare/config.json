@@ -1,0 +1,18 @@
+{
+  "development": {
+    "cdnDomain": "dev-cdn.example.com",
+    "namespaceId": "your-dev-namespace-id",
+    "comment": "Development environment configuration"
+  },
+  "production": {
+    "cdnDomain": "cdn.example.com",
+    "namespaceId": "your-prod-namespace-id",
+    "comment": "Production environment configuration"
+  },
+  "settings": {
+    "maxFileSize": "10MB",
+    "allowedFileTypes": [".js", ".json", ".css"],
+    "cacheControl": "public, max-age=3600",
+    "compression": "gzip"
+  }
+}
